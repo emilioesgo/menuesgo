@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menú Interactivo - Multinivel</title>
+    <style>
+        /* (Mantenemos los mismos estilos de diseño, solo agregué un poco de orden) */
+        body { font-family: sans-serif; margin: 0; background: #f4f4f9; padding-bottom: 300px; }
+        header { background: #ff5722; color: white; text-align: center; padding: 1.5rem; }
+        .producto { background: white; margin: 10px; padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .precio { color: #ff5722; font-weight: bold; }
+        .btn-agregar { background: #ffe0d2; color: #ff5722; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        #carrito-flotante { position: fixed; bottom: 0; width: 100%; background: white; padding: 20px; box-sizing: border-box; border-top: 2px solid #ddd; }
+        .oculto { display: none !important; }
+        #modal-confirmacion { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 100; }
+        .modal-contenido { background: white; padding: 20px; border-radius: 15px; width: 85%; max-width: 400px; }
+        .btn-enviar-wa { background: #25d366; color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; margin-top: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <header id="header-restaurante">
+        <h1 id="nombre-restaurante">Cargando...</h1>
+        <p id="eslogan-restaurante">Selecciona tus favoritos</p>
+    </header>
+
+    <main id="contenedor-menu"></main>
+
+    <div id="carrito-flotante" class="oculto">
+        <div id="opciones-entrega">
+            <label><input type="radio" name="entrega" value="pickup" checked onchange="actualizarUI()"> Recoger</label>
+            <label><input type="radio" name="entrega" value="delivery" onchange="actualizarUI()"> Domicilio (+$50)</label>
+            <textarea id="direccion-input" class="oculto" placeholder="Tu dirección completa..." style="width:100%; margin-top:10px;"></textarea>
+        </div>
+        <p><strong>Total: $<span id="precio-total">0.00</span></strong></p>
+        <button onclick="mostrarConfirmacion()" style="width:100%; padding:15px; background:#333; color:white; border:none; border-radius:8px; font-weight:bold;">Revisar Pedido</button>
+    </div>
+
+    <div id="modal-confirmacion" class="oculto">
+        <div class="modal-contenido">
+            <h3>Confirmar Pedido</h3>
+            <div id="detalle-resumen"></div>
+            <button class="btn-enviar-wa" onclick="enviarWhatsAppFinal()">Confirmar y Enviar WhatsApp</button>
+            <button onclick="cerrarConfirmacion()" style="width:100%; background:none; border:none; color:gray; margin-top:10px;">Cancelar</button>
+        </div>
+    </div>
+
+    <script>
+        // --- BASE DE DATOS DE TUS CLIENTES ---
+        const BASE_DATOS = {
+            "tacos": {
+                nombre: "Tacos El Pastorcito",
+                whatsapp: "529991234567",
+                color: "#d32f2f",
+                productos: [
+                    { nombre: "Taco al Pastor", precio: 18 },
+                    { nombre: "Gringa Especial", precio: 55 },
+                    { nombre: "Refresco 600ml", precio: 25 }
+                ]
+            },
+            "pizzeria": {
+                nombre: "Pizza & Amore",
+                whatsapp: "529990001122",
+                color: "#2e7d32",
+                productos: [
+                    { nombre: "Pizza Pepperoni Gde", precio: 190 },
+                    { nombre: "Papas Gajo", precio: 70 },
+                    { nombre: "Cerveza Nacional", precio: 45 }
+                ]
+            }
+        };
+
+        let carrito = [];
+        let restauranteActivo = null;
+
+        // 1. Detectar qué restaurante cargar según la URL (?restaurante=tacos)
+        function inicializar() {
+            const params = new URLSearchParams(window.location.search);
+            const idRestaurante = params.get('restaurante');
+
+            if (idRestaurante && BASE_DATOS[idRestaurante]) {
+                restauranteActivo = BASE_DATOS[idRestaurante];
+                cargarContenido();
+            } else {
+                document.getElementById('nombre-restaurante').innerText = "Restaurante no encontrado";
+            }
+        }
+
+        // 2. Dibujar el menú en la pantalla
+        function cargarContenido() {
+            document.getElementById('nombre-restaurante').innerText = restauranteActivo.nombre;
+            document.getElementById('header-restaurante').style.backgroundColor = restauranteActivo.color;
+            
+            const contenedor = document.getElementById('contenedor-menu');
+            restauranteActivo.productos.forEach(prod => {
+                const div = document.createElement('div');
+                div.className = 'producto';
+                div.innerHTML = `
+                    <div><h3>${prod.nombre}</h3><p class="precio">$${prod.precio.toFixed(2)}</p></div>
+                    <button class="btn-agregar" onclick="agregar('${prod.nombre}', ${prod.precio})">+ Agregar</button>
+                `;
+                contenedor.appendChild(div);
+            });
+        }
+
+        // Lógica del carrito (igual a la anterior pero usa 'restauranteActivo.whatsapp')
+        function agregar(nombre, precio) {
+            const item = carrito.find(i => i.nombre === nombre);
+            if (item) item.cantidad++;
+            else carrito.push({ nombre, precio, cantidad: 1 });
+            actualizarUI();
+        }
+
+        function actualizarUI() {
+            const contenedor = document.getElementById('carrito-flotante');
+            const esDelivery = document.querySelector('input[name="entrega"]:checked').value === 'delivery';
+            const inputDir = document.getElementById('direccion-input');
+            
+            if (carrito.length > 0) contenedor.classList.remove('oculto');
+            
+            if (esDelivery) inputDir.classList.remove('oculto');
+            else inputDir.classList.add('oculto');
+
+            let total = carrito.reduce((sum, i) => sum + (i.precio * i.cantidad), 0);
+            if (esDelivery) total += 50;
+            document.getElementById('precio-total').innerText = total.toFixed(2);
+        }
+
+        function mostrarConfirmacion() {
+            const detalle = document.getElementById('detalle-resumen');
+            let html = "<ul>";
+            carrito.forEach(i => html += `<li>${i.cantidad}x ${i.nombre}</li>`);
+            html += "</ul>";
+            detalle.innerHTML = html;
+            document.getElementById('modal-confirmacion').classList.remove('oculto');
+        }
+
+        function cerrarConfirmacion() {
+            document.getElementById('modal-confirmacion').classList.add('oculto');
+        }
+
+        function enviarWhatsAppFinal() {
+            const esDelivery = document.querySelector('input[name="entrega"]:checked').value === 'delivery';
+            const dir = document.getElementById('direccion-input').value;
+            
+            let mensaje = `*PEDIDO PARA: ${restauranteActivo.nombre}*\n\n`;
+            carrito.forEach(i => mensaje += `• ${i.cantidad}x ${i.nombre}\n`);
+            
+            if (esDelivery) mensaje += `\n🛵 *Envío a:* ${dir}\n(+ $50 envío)`;
+            else mensaje += `\n🏃‍♂️ *Pasaré a recoger*`;
+            
+            mensaje += `\n\n*Total: $${document.getElementById('precio-total').innerText}*`;
+
+            window.open(`https://wa.me/${restauranteActivo.whatsapp}?text=${encodeURIComponent(mensaje)}`);
+        }
+
+        // Arrancar la app
+        window.onload = inicializar;
+    </script>
+</body>
+</html>
